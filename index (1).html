@@ -1,0 +1,593 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Oasis Protocol</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.7/dist/axios.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Simulated backend API (replace with actual Node.js backend in production)
+        const api = {
+            async registerTeam(teamData) {
+                // Simulate team registration
+                return { success: true, team: { ...teamData, id: Math.random().toString() } };
+            },
+            async loginTeam(credentials) {
+                // Simulate team login (e.g., Google OAuth)
+                if (credentials.email && credentials.password) {
+                    return { success: true, token: 'team-token', team: { id: '1', name: credentials.email } };
+                }
+                throw new Error('Invalid credentials');
+            },
+            async loginAdmin(credentials) {
+                // Simulate admin login
+                if (credentials.email === 'admin@oasis.com' && credentials.password === 'admin123') {
+                    return { success: true, token: 'admin-token', admin: { id: 'admin1' } };
+                }
+                throw new Error('Invalid admin credentials');
+            },
+            async getChallenges() {
+                // Simulate fetching challenges
+                return [
+                    {
+                        id: '1',
+                        title: 'Challenge 1',
+                        algoProblem: { description: 'Write a function to reverse a string', constraints: 'Time: O(n), Space: O(1)' },
+                        buildathonProblem: { description: 'Build a simple calculator', githubLink: '' },
+                        flag: 'FLAG123'
+                    }
+                ];
+            },
+            async submitCode(challengeId, code, language) {
+                // Simulate Judge0 API integration
+                const response = await axios.post('http://10.3.5.139:2358/submissions', {
+                    source_code: code,
+                    language_id: language === 'javascript' ? 63 : 71, // JS or Python
+                    stdin: ''
+                }, {
+                    headers: { 'Authorization': 'Bearer ZHVvdGhhbjUuMA==' }
+                });
+                return response.data;
+            },
+            async validateFlag(challengeId, flag) {
+                // Simulate flag validation
+                return flag === 'FLAG123';
+            },
+            async submitBuildathon(challengeId, githubLink) {
+                // Simulate buildathon submission
+                return { success: true, submissionId: Math.random().toString() };
+            },
+            async getLeaderboard() {
+                // Simulate leaderboard data
+                return [
+                    { teamName: 'Team Alpha', points: 100, submissions: 2 },
+                    { teamName: 'Team Beta', points: 80, submissions: 1 }
+                ];
+            },
+            async getTeams() {
+                // Simulate team data
+                return [
+                    { id: '1', name: 'Team Alpha', submissions: [{ challengeId: '1', status: 'Correct' }] }
+                ];
+            },
+            async createChallenge(challengeData) {
+                // Simulate challenge creation
+                return { success: true, challenge: { ...challengeData, id: Math.random().toString() } };
+            }
+        };
+
+        // Team Authentication Components
+        function TeamSignup({ setAuth }) {
+            const [teamName, setTeamName] = useState('');
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleSignup = async () => {
+                try {
+                    const response = await api.registerTeam({ teamName, email, password });
+                    if (response.success) {
+                        setAuth({ type: 'team', token: response.team.id });
+                    }
+                } catch (err) {
+                    setError('Signup failed');
+                }
+            };
+
+            return (
+                <div className="max-w-md mx-auto p-4">
+                    <h2 className="text-2xl font-bold mb-4">Team Signup</h2>
+                    <input
+                        type="text"
+                        placeholder="Team Name"
+                        value={teamName}
+                        onChange={(e) => setTeamName(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <button onClick={handleSignup} className="w-full p-2 bg-blue-500 text-white rounded">Sign Up</button>
+                    {error && <p className="text-red-500 mt-2">{error}</p>}
+                </div>
+            );
+        }
+
+        function TeamLogin({ setAuth }) {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleLogin = async () => {
+                try {
+                    const response = await api.loginTeam({ email, password });
+                    if (response.success) {
+                        setAuth({ type: 'team', token: response.token, team: response.team });
+                    }
+                } catch (err) {
+                    setError('Login failed');
+                }
+            };
+
+            return (
+                <div className="max-w-md mx-auto p-4">
+                    <h2 className="text-2xl font-bold mb-4">Team Login</h2>
+                    <input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <button onClick={handleLogin} className="w-full p-2 bg-blue-500 text-white rounded">Login</button>
+                    {error && <p className="text-red-500 mt-2">{error}</p>}
+                </div>
+            );
+        }
+
+        // Admin Authentication Components
+        function AdminLogin({ setAuth }) {
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+
+            const handleLogin = async () => {
+                try {
+                    const response = await api.loginAdmin({ email, password });
+                    if (response.success) {
+                        setAuth({ type: 'admin', token: response.token });
+                    }
+                } catch (err) {
+                    setError('Admin login failed');
+                }
+            };
+
+            return (
+                <div className="max-w-md mx-auto p-4">
+                    <h2 className="text-2xl font-bold mb-4">Admin Login</h2>
+                    <input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <button onClick={handleLogin} className="w-full p-2 bg-blue-500 text-white rounded">Login</button>
+                    {error && <p className="text-red-500 mt-2">{error}</p>}
+                </div>
+            );
+        }
+
+        // Admin Dashboard
+        function AdminDashboard({ setAuth }) {
+            const [stats, setStats] = useState({ teams: 0, challenges: 0, submissions: 0 });
+            const [leaderboard, setLeaderboard] = useState([]);
+
+            useEffect(() => {
+                // Fetch dashboard stats
+                api.getLeaderboard().then(data => setLeaderboard(data));
+                api.getTeams().then(teams => setStats({ teams: teams.length, challenges: 1, submissions: teams.reduce((sum, t) => sum + t.submissions.length, 0) }));
+            }, []);
+
+            return (
+                <div className="p-4">
+                    <h2 className="text-2xl font-bold mb-4">Admin Dashboard</h2>
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div className="p-4 bg-gray-100 rounded">
+                            <h3 className="font-bold">Teams</h3>
+                            <p>{stats.teams}</p>
+                        </div>
+                        <div className="p-4 bg-gray-100 rounded">
+                            <h3 className="font-bold">Challenges</h3>
+                            <p>{stats.challenges}</p>
+                        </div>
+                        <div className="p-4 bg-gray-100 rounded">
+                            <h3 className="font-bold">Submissions</h3>
+                            <p>{stats.submissions}</p>
+                        </div>
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Leaderboard</h3>
+                    <table className="w-full border">
+                        <thead>
+                            <tr>
+                                <th className="border p-2">Team</th>
+                                <th className="border p-2">Points</th>
+                                <th className="border p-2">Submissions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {leaderboard.map(team => (
+                                <tr key={team.teamName}>
+                                    <td className="border p-2">{team.teamName}</td>
+                                    <td className="border p-2">{team.points}</td>
+                                    <td className="border p-2">{team.submissions}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <button onClick={() => setAuth(null)} className="mt-4 p-2 bg-red-500 text-white rounded">Logout</button>
+                </div>
+            );
+        }
+
+        // Admin Challenge Management
+        function AdminChallengeManagement() {
+            const [challenges, setChallenges] = useState([]);
+            const [newChallenge, setNewChallenge] = useState({
+                title: '',
+                algoProblem: { description: '', constraints: '' },
+                buildathonProblem: { description: '' },
+                flag: ''
+            });
+
+            useEffect(() => {
+                api.getChallenges().then(setChallenges);
+            }, []);
+
+            const handleCreateChallenge = async () => {
+                const response = await api.createChallenge(newChallenge);
+                if (response.success) {
+                    setChallenges([...challenges, response.challenge]);
+                    setNewChallenge({ title: '', algoProblem: { description: '', constraints: '' }, buildathonProblem: { description: '' }, flag: '' });
+                }
+            };
+
+            return (
+                <div className="p-4">
+                    <h2 className="text-2xl font-bold mb-4">Challenge Management</h2>
+                    <div className="mb-4">
+                        <input
+                            type="text"
+                            placeholder="Challenge Title"
+                            value={newChallenge.title}
+                            onChange={(e) => setNewChallenge({ ...newChallenge, title: e.target.value })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <textarea
+                            placeholder="Algorithmic Problem Description"
+                            value={newChallenge.algoProblem.description}
+                            onChange={(e) => setNewChallenge({ ...newChallenge, algoProblem: { ...newChallenge.algoProblem, description: e.target.value } })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Constraints"
+                            value={newChallenge.algoProblem.constraints}
+                            onChange={(e) => setNewChallenge({ ...newChallenge, algoProblem: { ...newChallenge.algoProblem, constraints: e.target.value } })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <textarea
+                            placeholder="Buildathon Problem Description"
+                            value={newChallenge.buildathonProblem.description}
+                            onChange={(e) => setNewChallenge({ ...newChallenge, buildathonProblem: { ...newChallenge.buildathonProblem, description: e.target.value } })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Flag"
+                            value={newChallenge.flag}
+                            onChange={(e) => setNewChallenge({ ...newChallenge, flag: e.target.value })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <button onClick={handleCreateChallenge} className="p-2 bg-blue-500 text-white rounded">Create Challenge</button>
+                    </div>
+                    <h3 className="text-xl font-bold mb-2">Challenges</h3>
+                    <ul>
+                        {challenges.map(ch => (
+                            <li key={ch.id} className="p-2 border-b">{ch.title}</li>
+                        ))}
+                    </ul>
+                </div>
+            );
+        }
+
+        // Admin Team Management
+        function AdminTeamManagement() {
+            const [teams, setTeams] = useState([]);
+            const [search, setSearch] = useState('');
+
+            useEffect(() => {
+                api.getTeams().then(setTeams);
+            }, []);
+
+            const filteredTeams = teams.filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
+
+            return (
+                <div className="p-4">
+                    <h2 className="text-2xl font-bold mb-4">Team Management</h2>
+                    <input
+                        type="text"
+                        placeholder="Search teams"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full p-2 mb-4 border rounded"
+                    />
+                    <table className="w-full border">
+                        <thead>
+                            <tr>
+                                <th className="border p-2">Team Name</th>
+                                <th className="border p-2">Submissions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredTeams.map(team => (
+                                <tr key={team.id}>
+                                    <td className="border p-2">{team.name}</td>
+                                    <td className="border p-2">{team.submissions.length}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        }
+
+        // Challenge Portal
+        function ChallengePortal({ auth }) {
+            const [challenges, setChallenges] = useState([]);
+            const [selectedChallenge, setSelectedChallenge] = useState(null);
+            const [code, setCode] = useState('');
+            const [language, setLanguage] = useState('javascript');
+            const [output, setOutput] = useState('');
+            const [flag, setFlag] = useState('');
+            const [flagStatus, setFlagStatus] = useState('');
+            const [githubLink, setGithubLink] = useState('');
+
+            useEffect(() => {
+                api.getChallenges().then(setChallenges);
+            }, []);
+
+            const handleRunCode = async () => {
+                try {
+                    const response = await api.submitCode(selectedChallenge.id, code, language);
+                    setOutput(response.stdout || response.stderr || 'No output');
+                } catch (err) {
+                    setOutput('Error executing code');
+                }
+            };
+
+            const handleSubmitFlag = async () => {
+                const isValid = await api.validateFlag(selectedChallenge.id, flag);
+                setFlagStatus(isValid ? 'Flag correct! Buildathon unlocked.' : 'Invalid flag');
+            };
+
+            const handleSubmitBuildathon = async () => {
+                try {
+                    await api.submitBuildathon(selectedChallenge.id, githubLink);
+                    alert('Buildathon submitted successfully!');
+                } catch (err) {
+                    alert('Submission failed');
+                }
+            };
+
+            if (!selectedChallenge) {
+                return (
+                    <div className="p-4">
+                        <h2 className="text-2xl font-bold mb-4">Challenges</h2>
+                        <ul>
+                            {challenges.map(ch => (
+                                <li key={ch.id} onClick={() => setSelectedChallenge(ch)} className="p-2 border-b cursor-pointer">{ch.title}</li>
+                            ))}
+                        </ul>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="p-4">
+                    <h2 className="text-2xl font-bold mb-4">{selectedChallenge.title}</h2>
+                    <h3 className="text-xl font-bold">Algorithmic Problem</h3>
+                    <p>{selectedChallenge.algoProblem.description}</p>
+                    <p className="mb-4">Constraints: {selectedChallenge.algoProblem.constraints}</p>
+                    <select value={language} onChange={(e) => setLanguage(e.target.value)} className="p-2 mb-2 border rounded">
+                        <option value="javascript">JavaScript</option>
+                        <option value="python">Python</option>
+                    </select>
+                    <textarea
+                        value={code}
+                        onChange={(e) => setCode(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded h-40"
+                        placeholder="Write your code here"
+                    />
+                    <button onClick={handleRunCode} className="p-2 bg-blue-500 text-white rounded mb-2">Run Code</button>
+                    <pre className="p-2 bg-gray-100 rounded">{output}</pre>
+                    <input
+                        type="text"
+                        placeholder="Enter flag"
+                        value={flag}
+                        onChange={(e) => setFlag(e.target.value)}
+                        className="w-full p-2 mb-2 border rounded"
+                    />
+                    <button onClick={handleSubmitFlag} className="p-2 bg-blue-500 text-white rounded mb-2">Submit Flag</button>
+                    <p>{flagStatus}</p>
+                    {flagStatus.includes('correct') && (
+                        <div>
+                            <h3 className="text-xl font-bold">Buildathon Problem</h3>
+                            <p>{selectedChallenge.buildathonProblem.description}</p>
+                            <input
+                                type="text"
+                                placeholder="GitHub Link"
+                                value={githubLink}
+                                onChange={(e) => setGithubLink(e.target.value)}
+                                className="w-full p-2 mb-2 border rounded"
+                            />
+                            <button onClick={handleSubmitBuildathon} className="p-2 bg-blue-500 text-white rounded">Submit Buildathon</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Leaderboard
+        function Leaderboard() {
+            const [leaderboard, setLeaderboard] = useState([]);
+
+            useEffect(() => {
+                api.getLeaderboard().then(setLeaderboard);
+            }, []);
+
+            return (
+                <div className="p-4">
+                    <h2 className="text-2xl font-bold mb-4">Leaderboard</h2>
+                    <table className="w-full border">
+                        <thead>
+                            <tr>
+                                <th className="border p-2">Team</th>
+                                <th className="border p-2">Points</th>
+                                <th className="border p-2">Submissions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {leaderboard.map(team => (
+                                <tr key={team.teamName}>
+                                    <td className="border p-2">{team.teamName}</td>
+                                    <td className="border p-2">{team.points}</td>
+                                    <td className="border p-2">{team.submissions}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            );
+        }
+
+        // Main App
+        function App() {
+            const [auth, setAuth] = useState(null);
+
+            const handleLogout = () => {
+                setAuth(null);
+            };
+
+            if (!auth) {
+                return (
+                    <div className="p-4">
+                        <h1 className="text-3xl font-bold mb-4">The Oasis Protocol</h1>
+                        <div className="grid grid-cols-2 gap-4">
+                            <TeamSignup setAuth={setAuth} />
+                            <TeamLogin setAuth={setAuth} />
+                            <AdminLogin setAuth={setAuth} />
+                        </div>
+                    </div>
+                );
+            }
+
+            if (auth.type === 'admin') {
+                return (
+                    <div className="p-4">
+                        <h1 className="text-3xl font-bold mb-4">Admin Panel</h1>
+                        <button onClick={handleLogout} className="mb-4 p-2 bg-red-500 text-white rounded">Logout</button>
+                        <AdminDashboard setAuth={setAuth} />
+                        <AdminChallengeManagement />
+                        <AdminTeamManagement />
+                    </div>
+                );
+            }
+
+            return (
+                <div className="p-4">
+                    <h1 className="text-3xl font-bold mb-4">Welcome, {auth.team.name}</h1>
+                    <button onClick={handleLogout} className="mb-4 p-2 bg-red-500 text-white rounded">Logout</button>
+                    <ChallengePortal auth={auth} />
+                    <Leaderboard />
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
